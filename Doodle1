@@ -1,0 +1,62 @@
+# Demo for painting
+#
+# Bitmap Display Configuration:
+ # - Unit width in pixels: 8
+ # - Unit height in pixels: 8
+ # - Display width in pixels: 256
+ # - Display height in pixels: 256
+ # - Base Address for Display: 0x10008000 ($gp)
+ 
+ .data
+ 	displayAddress: .word 0x10008000
+ 	platform_green: .word 0xddffd9
+ 	doodle_pink: .word 0xf6d9ff
+ 	sky_blue: .word 0xd9f4ff
+ 	doodle_address .word 0x10008000 #doodle is initially at the top left of the screen
+ .text
+	lw $t0, displayAddress # $t0 stores the base address for display
+	#lw $t1, platform_green # $t1: colour green
+	#lw $t2, doodle_pink # $t2: colour doodle_pink
+	#lw $t3, sky_blue # $t3: colour doodle_pink
+	addi $a0, $zero, #get address for doodle as parameter for draw_doodle_fxn
+	
+	#store result in memory 
+	
+draw_doodle_fxn:
+	lw $t2, doodle_pink # $t2: colour doodle_pink	 
+	sw $t2, 0($a0) # paint the the point in $a0 pink
+	sw $t2, 124($a0) # paint the the point in $a0 +124 pink
+	sw $t2, 132($a0) # paint the the point in $a0 +132 pink
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	lw $t8, 0xffff0000
+	beq $t8, 1, keyboard_input
+keyboard_input: 
+	addi $t9, $zero, 1
+	lw $t7, 0xffff0004
+	beq $t7, 0x61, respond_to_A
+respond_to_A: 
+	addi $t4, $zero, 1
+Exit:
+	li $v0, 42
+	li $a0, 0
+	li $a1, 28
+	syscall
+	li $v0, 10 # terminate the program gracefully
