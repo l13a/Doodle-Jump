@@ -10,23 +10,41 @@
  .data
  	displayAddress: .word 0x10008000
  	platform_green: .word 0xddffd9
- 	doodle_pink: .word 0xf6d9ff
+ 	doodle_pink: .word 0x9c67b5
  	sky_blue: .word 0xd9f4ff
- 	doodle_address .word 0x10008000 #doodle is initially at the top left of the screen
+ 	doodle_address: .word 0x10008000 #doodle is initially at the top left of the screen
  .text
-	lw $t0, displayAddress # $t0 stores the base address for display
+main:	
+	#lw $t0, displayAddress # $t0 stores the base address for display
 	#lw $t1, platform_green # $t1: colour green
-	#lw $t2, doodle_pink # $t2: colour doodle_pink
-	#lw $t3, sky_blue # $t3: colour doodle_pink
-	addi $a0, $zero, #get address for doodle as parameter for draw_doodle_fxn
+	#lw $t2, doodle_pink # $t2: colour pink
+	#lw $t3, sky_blue # $t3: colour colour blue
 	
-	#store result in memory 
+	lw $t0, displayAddress # $t0 stores the address of top left
+	addi $t1, $zero, 0x10008ffc #$t1 stores the address for the right bottom
+	addi $t1, $t1, 4 # add 4 to right bottom address
+	lw $t3, sky_blue # $t2: colour sky_blue	  
+	jal draw_sky_fxn
+	
+	addi $a0, $zero, 0x10008008 #get address for doodle as parameter for draw_doodle_fxn
+	jal draw_doodle_fxn
 	
 draw_doodle_fxn:
 	lw $t2, doodle_pink # $t2: colour doodle_pink	 
 	sw $t2, 0($a0) # paint the the point in $a0 pink
 	sw $t2, 124($a0) # paint the the point in $a0 +124 pink
 	sw $t2, 132($a0) # paint the the point in $a0 +132 pink
+	jr $ra
+	
+draw_sky_fxn:
+DRAW_SKY_LOOP:
+	bge $t0, $t1, DRAW_SKY_END #if top left >= right bottom
+	sw $t3, 0($t0) #paint $t0 with color in $t3
+	addi $t0, $t0, 4 #$t0 = $t0 + 4
+	j DRAW_SKY_LOOP
+DRAW_SKY_END:	
+	jr $ra
+
 	
 	
 	
@@ -44,10 +62,8 @@ draw_doodle_fxn:
 	
 	
 	
-	
-	
-	lw $t8, 0xffff0000
-	beq $t8, 1, keyboard_input
+	#lw $t8, 0xffff0000
+	#beq $t8, 1, keyboard_input
 keyboard_input: 
 	addi $t9, $zero, 1
 	lw $t7, 0xffff0004
@@ -55,8 +71,8 @@ keyboard_input:
 respond_to_A: 
 	addi $t4, $zero, 1
 Exit:
-	li $v0, 42
-	li $a0, 0
-	li $a1, 28
-	syscall
+	#li $v0, 42
+	#li $a0, 0
+	#li $a1, 28
+	#syscall
 	li $v0, 10 # terminate the program gracefully
