@@ -8,37 +8,117 @@
  # - Base Address for Display: 0x10008000 ($gp)
  
  .data
- 	displayAddress: .word 0x10008000
- 	platform_green: .word 0xddffd9
+ 	topLeftAddress: .word 0x10008000
+ 	bottomRightAddress: .word 0x10008ffc
+ 	
+ 	doodlerAddress: .word 0x10008F3C
+ 	
+ 	firstPlatform: .word 0x10008000
+ 	secondPlatform: .word 0x10008400
+ 	thirdPlatform: .word 0x10008800
+ 	forthPlatform: .word 0x10008C00
+ 	
+ 	platform_green: .word 0x2E8B57  
  	doodle_pink: .word 0x9c67b5
  	sky_blue: .word 0xd9f4ff
- 	doodle_address: .word 0x10008000 #doodle is initially at the top left of the screen
+ 	
  .text
 main:	
-	#lw $t0, displayAddress # $t0 stores the base address for display
-	#lw $t1, platform_green # $t1: colour green
-	#lw $t2, doodle_pink # $t2: colour pink
-	#lw $t3, sky_blue # $t3: colour colour blue
+	lw $s0, topLeftAddress
+	lw $s1, bottomRightAddress
+	lw $s2, doodlerAddress
+	lw $s3, firstPlatform
+	lw $s4, secondPlatform
+	lw $s5, thirdPlatform
+	lw $s6, forthPlatform
+	#1. CHECK KEYBOARD INPUT
+		#update location of Doodle
+		#check for collision events
+	#2. UPDATE LOCATION OF PLATFORMS AND OTHER OBJECTS
 	
-	lw $t0, displayAddress # $t0 stores the address of top left
-	addi $t1, $zero, 0x10008ffc #$t1 stores the address for the right bottom
-	addi $t1, $t1, 4 # add 4 to right bottom address
-	lw $t3, sky_blue # $t2: colour sky_blue	  
-	jal draw_sky_fxn
+	#3. REDRAW THE SCREEN
 	
-	addi $a0, $zero, 0x10008008 #get address for doodle as parameter for draw_doodle_fxn
+	
+	
+	#draw the sky background
+	lw $t0, topLeftAddress # $t0 stores the address of top left
+	lw $t1, bottomRightAddress #$t1 stores the address for the right bottom
+	addi $t1, $t1, 4 # add 4 to right bottom address so that covers whole screen
+	lw $t3, sky_blue # $t3: colour sky_blue	  
+	jal draw_sky_fxn #call draw sky fxn to paint the background
+	
+	#draw the doodle based on address passed in $a0	
+	lw $t2, doodle_pink # $t2: colour doodle_pink 
 	jal draw_doodle_fxn
 	
+	
+	
+	lw $t6, firstPlatform
+	jal random_address_generator #get random address in this line
+	lw $t2, platform_green # $t2: colour green
+	jal draw_platform_fxn 
+	
+	
+	lw $t6, secondPlatform
+	jal random_address_generator #get random address in this line
+	lw $t2, platform_green # $t2: colour green
+	jal draw_platform_fxn 
+	
+	lw $t6, thirdPlatform
+	jal random_address_generator #get random address in this line
+	lw $t2, platform_green # $t2: colour green
+	jal draw_platform_fxn 
+	
+	lw $t6, forthPlatform
+	jal random_address_generator #get random address in this line
+	lw $t2, platform_green # $t2: colour green
+	jal draw_platform_fxn 
+	
+	
+	
+	#4. SLEEP
+	li $v0, 32
+	li $a0, 1000
+	syscalls
+	
+	#5 Go back to Step 1
+	j main
+	
+	
+#get random num within a range to specifiy number of 4's to add platform in the horizontal line, cant be more than 30
+random_address_generator:#genereate random address instead?
+	li $v0, 42
+	li $a0, 0
+	li $a1, 24
+	syscall
+	addi $t9, $zero, 4 #t9 = 4
+	mult $t9, $a0 #calc offset
+	mflo $t8 #get value of offset from LO to $t8
+	add $t9, $t8, $t6 #get position of platform start, on the line starting with address $t0
+	jr $ra
+	
+	
+draw_platform_fxn: 
+	sw $t2, 0($t9) # paint the the point in $a0 green
+	sw $t2, 4($t9)
+	sw $t2, 8($t9)
+	sw $t2, 12($t9)
+	sw $t2, 16($t9)
+	sw $t2, 20($t9) 
+	sw $t2, 24($t9)
+	sw $t2, 28($t9) #paint 8 pixels green starting from $a0
+	jr $ra
+
+	
 draw_doodle_fxn:
-	lw $t2, doodle_pink # $t2: colour doodle_pink	 
-	sw $t2, 0($a0) # paint the the point in $a0 pink
-	sw $t2, 124($a0) # paint the the point in $a0 +124 pink
-	sw $t2, 132($a0) # paint the the point in $a0 +132 pink
+	sw $t2, 0($s2) # paint the the point in $a0 pink
+	sw $t2, 124($s2) # paint the the point in $a0 +124 pink
+	sw $t2, 132($s2) # paint the the point in $a0 +132 pink
 	jr $ra
 	
 draw_sky_fxn:
 DRAW_SKY_LOOP:
-	bge $t0, $t1, DRAW_SKY_END #if top left >= right bottom
+	beq $t0, $t1, DRAW_SKY_END #if top left == right bottom
 	sw $t3, 0($t0) #paint $t0 with color in $t3
 	addi $t0, $t0, 4 #$t0 = $t0 + 4
 	j DRAW_SKY_LOOP
@@ -64,15 +144,15 @@ DRAW_SKY_END:
 	
 	#lw $t8, 0xffff0000
 	#beq $t8, 1, keyboard_input
-keyboard_input: 
-	addi $t9, $zero, 1
-	lw $t7, 0xffff0004
-	beq $t7, 0x61, respond_to_A
-respond_to_A: 
-	addi $t4, $zero, 1
-Exit:
+#keyboard_input: 
+	#addi $t9, $zero, 1
+	#lw $t7, 0xffff0004
+	#beq $t7, 0x61, respond_to_A
+#respond_to_A: 
+	#addi $t4, $zero, 1
+#Exit:
 	#li $v0, 42
 	#li $a0, 0
 	#li $a1, 28
 	#syscall
-	li $v0, 10 # terminate the program gracefully
+	#li $v0, 10 # terminate the program gracefully
