@@ -11,7 +11,7 @@
  	topLeftAddress: .word 0x10008000
  	bottomRightAddress: .word 0x10008ffc
  	
- 	doodlerAddress: .word 0x10008F3C
+ 	doodleAddress: .word 0x10008F3C
  	
  	firstPlatform: .word 0x10008000
  	secondPlatform: .word 0x10008400
@@ -20,73 +20,175 @@
  	
  	platform_green: .word 0x2E8B57  
  	doodle_pink: .word 0x9c67b5
+ 	doodle_black: .word 0x1c1c1c
  	sky_blue: .word 0xd9f4ff
  	
+ 	#currentHeight: .word 0
+ 	canvas: .word 0:4092
+ 	
+ 	
+ 	
  .text
+ 	addi $s7, $zero, -1
+ setup:
+ 	lw $t8, 0xffff0000	#check user input
+	beq $t8, 1, keyboard_start
+	j setup
+keyboard_start:
+	lw $t7, 0xffff0004 	#check if pressed s
+	beq $t7, 0x73, respond_to_S
+	j setup			#if not, check input again
+respond_to_S:
+	j main			#if start, jump to main and start game
+ 	
 main:	
 	lw $s0, topLeftAddress
 	lw $s1, bottomRightAddress
-	lw $s2, doodlerAddress
+	lw $s2, doodleAddress
 	lw $s3, firstPlatform
 	lw $s4, secondPlatform
 	lw $s5, thirdPlatform
 	lw $s6, forthPlatform
-	#1. CHECK KEYBOARD INPUT
-		#update location of Doodle
-		#check for collision events
+	#lw $s7, currentHeight
+	
+	
+#1. CHECK KEYBOARD INPUT
+	lw $t8, 0xffff0000
+	beq $t8, 1, keyboard_input
+	j end_input
+keyboard_input: 
+	lw $t7, 0xffff0004		#check input
+	beq $t7, 0x6A, respond_to_J
+	beq $t7, 0x6B, respond_to_K
+	j end_input
+respond_to_J: 
+	jal doodle_left
+	la $t1, doodleAddress #update doodleAddress
+	sw $s2, 0($t1)
+	j end_input
+respond_to_K: 
+	jal doodle_right
+	la $t1, doodleAddress #update doodleAddress
+	sw $s2, 0($t1)
+	j end_input
+end_input:
+	
+#update location of Doodle
+	add $t7, $zero, 14
+	bge $s7, $t7, finish_jump
+	jal doodle_up
+	la $t1, doodleAddress #update doodleAddress
+	sw $s2, 0($t1)
+	j end_update_doodle_location
+finish_jump:
+	#addi $s7, $zero, 15 #make currentHeight = 15 so that wont jump anymore 
+	jal doodle_down #doodle starts going down
+	la $t1, doodleAddress #update doodleAddress
+	sw $s2, 0($t1)
+	
+#check for collision events
+	lw $t6, doodleAddress
+	lw $t7, platform_green
+	jal step_on_platform
+	addi $t3, $zero, 1	#$t3 = 1 for comparison for step_on_platform's result
+	beq $t5, $t3, rejump #branch if step on platform: set currentHeight to -1
+	j dont_rejump
+rejump:
+	addi $s7, $zero, -1	
+dont_rejump:	
+
+end_update_doodle_location:		
+			
+		
 	#2. UPDATE LOCATION OF PLATFORMS AND OTHER OBJECTS
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
 	
 	#3. REDRAW THE SCREEN
 	
-	
+	#DRAW ON CANVAS FIRST
 	
 	#draw the sky background
-	lw $t0, topLeftAddress # $t0 stores the address of top left
-	lw $t1, bottomRightAddress #$t1 stores the address for the right bottom
-	addi $t1, $t1, 4 # add 4 to right bottom address so that covers whole screen
+	la $t0, canvas
+	addi $t1, $t0, 4096
 	lw $t3, sky_blue # $t3: colour sky_blue	  
 	jal draw_sky_fxn #call draw sky fxn to paint the background
 	
-	#draw the doodle based on address passed in $a0	
+	#draw the doodle based on address passed in $s2	
 	lw $t2, doodle_pink # $t2: colour doodle_pink 
+	lw $t3, doodle_black
+	lw $s2, doodleAddress
+	lw $t0, topLeftAddress
+	sub $s2, $s2, $t0  	#calculate offset of this doodle location
+	la $t1, canvas
+	add $s2, $t1, $s2 	#add offset to canvas, store in $s2, this is the doodle location in canvas
 	jal draw_doodle_fxn
 	
-	
-	
-	lw $t6, firstPlatform
-	jal random_address_generator #get random address in this line
-	lw $t2, platform_green # $t2: colour green
-	jal draw_platform_fxn 
-	
-	
-	lw $t6, secondPlatform
-	jal random_address_generator #get random address in this line
-	lw $t2, platform_green # $t2: colour green
-	jal draw_platform_fxn 
-	
-	lw $t6, thirdPlatform
-	jal random_address_generator #get random address in this line
-	lw $t2, platform_green # $t2: colour green
-	jal draw_platform_fxn 
-	
-	lw $t6, forthPlatform
-	jal random_address_generator #get random address in this line
-	lw $t2, platform_green # $t2: colour green
-	jal draw_platform_fxn 
-	
-	
+	#DRAW ON BITMAP NEXT
+	jal copy_to_bitmap
 	
 	#4. SLEEP
 	li $v0, 32
-	li $a0, 1000
-	syscalls
+	li $a0, 25
+	syscall
 	
 	#5 Go back to Step 1
 	j main
+
 	
+
 	
-#get random num within a range to specifiy number of 4's to add platform in the horizontal line, cant be more than 30
-random_address_generator:#genereate random address instead?
+doodle_up:
+	#add $t7, $zero, 8
+	#beq $s7, $t7, DOODLE_UP_END
+	addi $s2, $s2, -128
+	addi $s7, $s7, 1 #update currentHeight
+	jr $ra
+	
+doodle_left:
+	addi $s2, $s2, -4
+	jr $ra
+	
+doodle_right:
+	addi $s2, $s2, 4
+	jr $ra
+	
+doodle_down:
+	#keep going down until bigger than right bottom
+	#bge $s2, $s1, DOODLE_DOWN_END
+	#TO-DO: branch if step on platform
+	addi $s2, $s2, 128
+	jr $ra
+#DOODLE_DOWN_END:
+	#TO-DO: CALL BYE FUNCTION
+	#li $v0, 10 # terminate the program gracefully
+
+#return $t5 = 1, if stepped on platform, return $t5 = 0 otherwise
+step_on_platform:#parameters: $t6 = doodleAddress, $t7 = platform_green
+	add $t4, $t6, 128 #$t4 = address right below foot of doodle
+	lw $t3, 0($t4) #$t3 = colour at address $t4
+	lw $t2, 4($t4)
+	lw $t1, -4($t4)
+	beq $t3, $t7, yes_platform
+	beq $t2, $t7, yes_platform
+	beq $t1, $t7, yes_platform
+	add $t5, $zero, $zero
+	jr $ra
+yes_platform: 
+	addi $t5, $zero, 1
+	jr $ra
+		
+	
+#get random num within a range to specifiy number of 4's to add platform in the horizontal line, cant be more than 24
+random_address_generator:#genereate random address, store in $t9, with row number start passed in $t6
 	li $v0, 42
 	li $a0, 0
 	li $a1, 24
@@ -94,26 +196,40 @@ random_address_generator:#genereate random address instead?
 	addi $t9, $zero, 4 #t9 = 4
 	mult $t9, $a0 #calc offset
 	mflo $t8 #get value of offset from LO to $t8
-	add $t9, $t8, $t6 #get position of platform start, on the line starting with address $t0
+	add $t9, $t8, $t6 #get position of platform start, on the line starting with address $t6
 	jr $ra
 	
 	
 draw_platform_fxn: 
-	sw $t2, 0($t9) # paint the the point in $a0 green
+	sw $t2, 0($t9) # paint the the point in $t9 green
 	sw $t2, 4($t9)
 	sw $t2, 8($t9)
 	sw $t2, 12($t9)
 	sw $t2, 16($t9)
 	sw $t2, 20($t9) 
 	sw $t2, 24($t9)
-	sw $t2, 28($t9) #paint 8 pixels green starting from $a0
+	sw $t2, 28($t9) #paint 8 pixels green starting from $t9
 	jr $ra
 
 	
 draw_doodle_fxn:
-	sw $t2, 0($s2) # paint the the point in $a0 pink
-	sw $t2, 124($s2) # paint the the point in $a0 +124 pink
-	sw $t2, 132($s2) # paint the the point in $a0 +132 pink
+	sw $t3, -128($s2) 
+	sw $t2, -132($s2) 
+	sw $t2, -124($s2)
+	
+	sw $t2, -384($s2)
+	sw $t2, -256($s2) 
+	sw $t3, -260($s2) 
+	sw $t3, -252($s2)
+	
+	
+	sw $t2, 8($s2)
+	sw $t2, 12($s2) 
+	sw $t2, -8($s2) 
+	sw $t2, -12($s2) 
+	
+	sw $t2, -144($s2) 
+	sw $t2, -112($s2)
 	jr $ra
 	
 draw_sky_fxn:
@@ -124,35 +240,23 @@ DRAW_SKY_LOOP:
 	j DRAW_SKY_LOOP
 DRAW_SKY_END:	
 	jr $ra
-
+	
+copy_to_bitmap: #copy everything from canvas to bitmap
+	lw $t8, topLeftAddress
+	la $t9, canvas
+	add $t0, $zero, $zero
+	addi $t1, $zero, 1024
+COPY_LOOP:
+	bge $t0, $t1, COPY_END
+	sll $t2, $t0, 2
+	add $t3, $t8, $t2
+	add $t4, $t9, $t2
+	lw $t5, 0($t4)
+	sw $t5, 0($t3)
+COPY_UPDATE:
+	addi $t0, $t0, 1
+	j COPY_LOOP
+COPY_END:
+	jr $ra
 	
 	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	#lw $t8, 0xffff0000
-	#beq $t8, 1, keyboard_input
-#keyboard_input: 
-	#addi $t9, $zero, 1
-	#lw $t7, 0xffff0004
-	#beq $t7, 0x61, respond_to_A
-#respond_to_A: 
-	#addi $t4, $zero, 1
-#Exit:
-	#li $v0, 42
-	#li $a0, 0
-	#li $a1, 28
-	#syscall
-	#li $v0, 10 # terminate the program gracefully
