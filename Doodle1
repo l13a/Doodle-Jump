@@ -1,11 +1,39 @@
-# Demo for painting
+#####################################################################
 #
+#
+# Student: Xinyi Chen, 1005825136
+#
+# CSC258H5S Fall 2020 Assembly Final Project
+ # University of Toronto, St. George
+ 
 # Bitmap Display Configuration:
  # - Unit width in pixels: 8
  # - Unit height in pixels: 8
  # - Display width in pixels: 256
  # - Display height in pixels: 256
  # - Base Address for Display: 0x10008000 ($gp)
+ #
+ # Which milestone is reached in this submission?
+ # (See the assignment handout for descriptions of the milestones)
+ # - Milestone 5 
+ #
+ # Which approved additional features have been implemented?
+ # (See the assignment handout for the list of additional features)
+ # 1. Fancier Graphics for the Doodle, the platforms, the opponent, and the message displays
+ # 2. Dynamic on-screen notifications: Displays "WOW!" after jumping on 4 platforms/reaching the level with shorter platforms. 
+ #					Displays "WOW!!" after beating the Octopus opponenet/succesffully completing 5 jumps.
+ # 3. Sound effect when bounce on platforms
+ # 4. Lethal opponent Octopus: floats around the screen in a level in the game. If the Doodle touches the Octopus, 
+ # 				then it gets poisoned and the game ends immediately.
+ # 
+ #
+ # Any additional information that the TA needs to know:
+ # - Press "s" to start the game or to restart the game after the "Bye~" screen.
+ # - Since I used a buffer, the program sometimes throws an out of bound error if the Doodle jumps too far above the top of the Bitmap. 
+ # Please try to ensure that the Doodle stays within the Bitmap. If the error happens, you may just re-run it and start the game again.
+ #
+ #####################################################################
+ 
  
  .data
  	topLeftAddress: .word 0x10008000
@@ -27,14 +55,35 @@
  	sky_blue: .word 0xe0f0e9
  	
  	gameOverColour: .word 0x003472
+ 	wowColour: .word 0xbe002f
  	
  	canvas: .word 0:4092
+ 	
+ 	pitch: .byte 72 # Put the notes to your song in a MIPS “array”
+	duration: .byte 100
+	instrument: .byte 58
+	volume: .byte 100
+ 	
+ 	score: .word 0
+ 	
+ 	opponentAddress: .word 0x10008C00
+ 	opponent_body: .word 0xfa8c35
+ 	opponent_eyes: .word 0xff7500
+ 	
  	
  	
  	
  .text	
  setup:
  	addi $s7, $zero, -1
+ 	la $t0, score
+ 	sw $zero, 0($t0)
+ 	
+ 	#reset doodleAddress
+ 	la $t0, doodleAddress
+ 	addi $t1, $zero, 0x10008F3C
+ 	sw $t1, 0($t0)
+ 	
  	#set platform locations to randomly generated places in their rows
 	addi $t6, $zero, 0x10008000
 	jal random_address_generator
@@ -142,10 +191,24 @@ game_over:
 	lw $t4, gameOverColour
 	lw $t9, topLeftAddress
 	jal display_game_over
+	        
 	j setup
 	
 dont_game_over:
 #check for collision events
+
+	lw $t6, doodleAddress
+	lw $t7, opponent_body
+	jal step_on_opponent
+	addi $t3, $zero, 1	#$t3 = 1 for comparison for step_on_opponent's result
+	beq $t5, $t3, dead 	#game over
+	j not_dead
+dead:
+	addi $t0, $zero, 0x10008F3C
+	la $t1, doodleAddress
+	sw $t0, 0($t1)
+	j game_over
+not_dead:
 	lw $t6, doodleAddress
 	lw $t7, platform_green
 	jal step_on_platform
@@ -153,7 +216,25 @@ dont_game_over:
 	beq $t5, $t3, rejump #branch if step on platform: set currentHeight to -1
 	j dont_rejump
 rejump:
-	addi $s7, $zero, -1	
+	li $v0, 31 
+	la $t0, pitch
+	addi $t0, $t0, 12
+	la $t1, duration 
+	la $t2, instrument
+	la $t3, volume 
+	move $a0, $t0 
+	move $a1, $t1 
+	move $a2, $t2
+	move $a3, $t3 
+	syscall 
+	
+	addi $s7, $zero, -1
+	
+	lw $t0, score
+	addi $t0, $t0, 1
+	la $t1, score  #update score
+	sw $t0, 0($t1)
+	
 dont_rejump:	
 
 end_update_doodle_location:		
@@ -162,7 +243,16 @@ end_update_doodle_location:
 			
 		
 #2. UPDATE LOCATION OF PLATFORMS AND OTHER OBJECTS
-
+	lw $t0, score
+	addi $t1, $zero, 5
+	beq $t0, $t1, generate_opponent
+	j dont_generate_opponent
+generate_opponent: 
+	addi $t6, $zero, 0x10008C00
+	jal random_address_generator
+	la $t1, opponentAddress
+	sw $t9, 0($t1)
+dont_generate_opponent:
 	lw $t0, forthPlatform
 	lw $t1, bottomRightAddress
 	bge $t0, $t1, generate_new_platform #if (forthPlatform over screen), jump to new random platform generator on top
@@ -245,10 +335,47 @@ dont_generate_new_platform:
 	jal draw_doodle_fxn
 	
 	
-	
+	lw $t0, score
+	addi $t1, $zero, 5
+	beq $t0, $t1, draw_opponent
+	j dont_draw_opponent
+draw_opponent: 
+	lw $s2, opponentAddress
+	lw $t2, opponent_body
+	lw $t3, opponent_eyes
+	lw $t0, topLeftAddress
+	sub $s2, $s2, $t0  	#calculate offset of this doodle location
+	la $t1, canvas
+	add $s2, $t1, $s2 	#add offset to canvas, store in $s2, this is the doodle location in canvas
+	jal draw_opponent_fxn
+dont_draw_opponent:
+	lw $t0, score
+	addi $t1, $zero, 4
+	beq $t0, $t1, draw_wow
+	j dont_draw_wow
+draw_wow:
+	add $t9, $zero, $zero
+	lw $t3, wowColour
+	la $t1, canvas
+	add $t9, $t1, $zero
+	jal display_wow
+dont_draw_wow:
+	lw $t0, score
+	addi $t1, $zero, 6
+	beq $t0, $t1, draw_wow2
+	j dont_draw_wow2
+draw_wow2:
+	add $t9, $zero, $zero
+	lw $t3, wowColour
+	la $t1, canvas
+	add $t9, $t1, $zero
+	jal display_wow2
+dont_draw_wow2:		
 	
 	#DRAW ON BITMAP NEXT
 	jal copy_to_bitmap
+	
+	
 	
 #4. SLEEP
 	li $v0, 32
@@ -264,6 +391,135 @@ dont_generate_new_platform:
 
 
 #FUNCTIONS
+display_wow2:#param: $t3: wow colour, $t9 topLeftAddress
+
+	#W
+	sw $t3, 512($t9)
+	sw $t3, 640($t9)
+	sw $t3, 768($t9)
+	
+	sw $t3, 520($t9)
+	sw $t3, 648($t9)
+	sw $t3, 776($t9)
+	
+	sw $t3, 528($t9)
+	sw $t3, 656($t9)
+	sw $t3, 784($t9)
+	
+	sw $t3, 900($t9)
+	sw $t3, 908($t9)
+	
+	#0
+	sw $t3, 536($t9)
+	sw $t3, 664($t9)
+	sw $t3, 792($t9)
+	sw $t3, 920($t9)
+	
+	sw $t3, 544($t9)
+	sw $t3, 672($t9)
+	sw $t3, 800($t9)
+	sw $t3, 928($t9)
+	
+	sw $t3, 540($t9)
+	sw $t3, 924($t9)
+	
+	#W
+	sw $t3, 552($t9)
+	sw $t3, 680($t9)
+	sw $t3, 808($t9)
+	
+	sw $t3, 560($t9)
+	sw $t3, 688($t9)
+	sw $t3, 816($t9)
+	
+	sw $t3, 568($t9)
+	sw $t3, 696($t9)
+	sw $t3, 824($t9)
+	
+	sw $t3, 940($t9)
+	sw $t3, 948($t9)
+	
+	#!
+	sw $t3, 448($t9)
+	sw $t3, 576($t9)
+	sw $t3, 704($t9)
+	
+	sw $t3, 960($t9)
+	
+	#!
+	sw $t3, 456($t9)
+	sw $t3, 584($t9)
+	sw $t3, 712($t9)
+	
+	sw $t3, 968($t9)
+	
+	#!
+	sw $t3, 464($t9)
+	sw $t3, 592($t9)
+	sw $t3, 720($t9)
+	
+	sw $t3, 976($t9)
+	
+	jr $ra
+	
+display_wow:#param: $t3: wow colour, $t9 topLeftAddress
+
+	#W
+	sw $t3, 512($t9)
+	sw $t3, 640($t9)
+	sw $t3, 768($t9)
+	
+	sw $t3, 520($t9)
+	sw $t3, 648($t9)
+	sw $t3, 776($t9)
+	
+	sw $t3, 528($t9)
+	sw $t3, 656($t9)
+	sw $t3, 784($t9)
+	
+	sw $t3, 900($t9)
+	sw $t3, 908($t9)
+	
+	#0
+	sw $t3, 536($t9)
+	sw $t3, 664($t9)
+	sw $t3, 792($t9)
+	sw $t3, 920($t9)
+	
+	sw $t3, 544($t9)
+	sw $t3, 672($t9)
+	sw $t3, 800($t9)
+	sw $t3, 928($t9)
+	
+	sw $t3, 540($t9)
+	sw $t3, 924($t9)
+	
+	#W
+	sw $t3, 552($t9)
+	sw $t3, 680($t9)
+	sw $t3, 808($t9)
+	
+	sw $t3, 560($t9)
+	sw $t3, 688($t9)
+	sw $t3, 816($t9)
+	
+	sw $t3, 568($t9)
+	sw $t3, 696($t9)
+	sw $t3, 824($t9)
+	
+	sw $t3, 940($t9)
+	sw $t3, 948($t9)
+	
+	#!
+	sw $t3, 448($t9)
+	sw $t3, 576($t9)
+	sw $t3, 704($t9)
+	
+	sw $t3, 960($t9)
+	
+	jr $ra
+	
+
 display_game_over: #param $t4: game over colour, $t9: topLeftAddress
 
 	#B
@@ -378,9 +634,17 @@ platform_down: #param: $t6: start address of the platform
 		
 	
 doodle_up:
+	#lw $t0, score
+	#addi $t1, $zero, 5
+	#bge $t0, $t1, faster
 	addi $s2, $s2, -128
 	addi $s7, $s7, 1 #update currentHeight
 	jr $ra
+#faster: 
+	#addi $s2, $s2, -384
+	#addi $s7, $s7, 1 #update currentHeight
+	#jr $ra
+	
 	
 doodle_left:
 	addi $s2, $s2, -4
@@ -408,6 +672,59 @@ step_on_platform:#parameters: $t6 = doodleAddress, $t7 = platform_green
 yes_platform: 
 	addi $t5, $zero, 1
 	jr $ra
+	
+
+#return $t5 = 1, if stepped on opponent, return $t5 = 0 otherwise
+step_on_opponent:#parameters: $t6 = doodleAddress, $t7 = opponentBody
+	lw $t0, -128($t6)
+	beq $t0, $t7, yes_opponent
+	
+	lw $t0, -132($t6)
+	beq $t0, $t7, yes_opponent
+
+	lw $t0, -124($t6)
+	beq $t0, $t7, yes_opponent
+	
+	lw $t0, -512($t6)
+	beq $t0, $t7, yes_opponent
+	
+	lw $t0, -516($t6)
+	beq $t0, $t7, yes_opponent
+	
+	lw $t0, -508($t6)
+	beq $t0, $t7, yes_opponent
+	
+	lw $t0, -264($t6)
+	beq $t0, $t7, yes_opponent
+	
+	lw $t0, -392($t6)
+	beq $t0, $t7, yes_opponent
+	
+	lw $t0, -248($t6)
+	beq $t0, $t7, yes_opponent
+	
+	lw $t0, -376($t6)
+	beq $t0, $t7, yes_opponent
+	
+	lw $t0, 8($t6)
+	beq $t0, $t7, yes_opponent
+	
+	lw $t0, -8($t6)
+	beq $t0, $t7, yes_opponent
+	
+	lw $t0, -140($t6)
+	beq $t0, $t7, yes_opponent
+	
+	lw $t0, -116($t6)
+	beq $t0, $t7, yes_opponent
+	
+	add $t5, $zero, $zero
+	jr $ra
+yes_opponent: 
+	addi $t5, $zero, 1
+	jr $ra
+	
+
 		
 	
 #get random num within a range to specifiy number of 4's to add platform in the horizontal line, cant be more than 24
@@ -424,6 +741,9 @@ random_address_generator:#genereate random address, store in $t9, with row numbe
 	
 	
 draw_platform_fxn: #@param: $t9:start of platform location $t2: green color $t3: dark green color
+	lw $t0, score
+	addi $t1, $zero, 4
+	bge $t0, $t1, shorter
 	sw $t2, 0($t9) # paint the the point in $t9 green
 	sw $t2, 4($t9)
 	sw $t2, 8($t9)
@@ -442,6 +762,19 @@ draw_platform_fxn: #@param: $t9:start of platform location $t2: green color $t3:
 	sw $t3, 148($t9) 
 	sw $t3, 152($t9)
 	sw $t3, 156($t9) #paint 8 pixels green starting from $t9
+	jr $ra
+	
+shorter:
+	sw $t2, 0($t9) # paint the the point in $t9 green
+	sw $t2, 4($t9)
+	sw $t2, 8($t9)
+	sw $t2, 12($t9)
+	
+	
+	sw $t3, 128($t9) # paint the the point in $t9 green
+	sw $t3, 132($t9)
+	sw $t3, 136($t9)
+	sw $t3, 140($t9)
 	jr $ra
 
 	
@@ -474,6 +807,26 @@ draw_doodle_fxn:
 	
 	sw $t2, -140($s2) 
 	sw $t2, -116($s2)
+	jr $ra
+	
+draw_opponent_fxn: #$s2: opponent location, $t3: eyes colour, $t2: body colour
+	sw $t2, -128($s2) 
+	sw $t2, -132($s2) 
+	sw $t2, -124($s2)
+	
+	sw $t2, -384($s2)
+	sw $t2, -256($s2) 
+	sw $t2, -260($s2) 
+	sw $t2, -252($s2)
+	
+	
+	sw $t2, 8($s2)
+	sw $t2, 12($s2) 
+	sw $t2, -8($s2) 
+	sw $t2, -12($s2) 
+	
+	sw $t2, -144($s2) 
+	sw $t2, -112($s2)
 	jr $ra
 	
 draw_sky_fxn:
